@@ -19,7 +19,8 @@ from restfulapigen.envelop import (
     record_updated_envelop,
     record_created_envelop,
     record_notfound_envelop,
-    record_exists_envelop
+    record_exists_envelop,
+    record_deleted_envelop
 )
 
 from restfulapigen.errors import (
@@ -54,11 +55,11 @@ class RESTApi:
                     before_response_for_resource=None):
 
         if not model.__mapper__.primary_key:
-            raise PrimaryKeyNotFound('Primary key not found in % table' % model.name)
+            raise PrimaryKeyNotFound('Primary key not found in % table' % model.__tablename__)
     
         _primary_key = model.__mapper__.primary_key[0].name
         
-        @new_method(model.__tablename__)
+        
         def _get_resources():
             results = self.db_session.query(model).all()
             _list_data = list({
@@ -71,9 +72,11 @@ class RESTApi:
                 before_response_for_resources(_list_data)
             
             return jsonify(json_records_envelop(_list_data))
+        _get_resources.__name__ = 'get_all' + model.__tablename__ 
+
         self.app.route('/%s' % model.__tablename__)(_get_resources)
 
-        @new_method(model.__tablename__)
+        
         def _get_resource(r_id):
             try:
 
@@ -90,13 +93,15 @@ class RESTApi:
             if before_response_for_resource:
                 before_response_for_resource(_data)
             return jsonify(json_records_envelop(_data))
+        _get_resource.__name__ = 'get' + model.__tablename__
+
         self.app.route('/%s/<int:r_id>' % model.__tablename__)(_get_resource)
     
 
     def update_for(self, model, 
                     before_response_for_resource=None):
         if not model.__mapper__.primary_key:
-            raise PrimaryKeyNotFound('Primary key not found in % table' % model.name)
+            raise PrimaryKeyNotFound('Primary key not found in % table' % model.__tablename__)
     
         _primary_key = model.__mapper__.primary_key[0].name
         
@@ -109,7 +114,7 @@ class RESTApi:
             else:
                 return record_updated_envelop(request.json)
 
-        
+        _update_resource.__name__ = 'put' + model.__tablename__
         #add the route 
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['PUT'])(_update_resource)
     
@@ -120,12 +125,38 @@ class RESTApi:
             try:
                 self.db_session.add(model(**request.json))
                 self.db_session.commit()
-            except Exception as e:
-                raise
-                return record_exists_envelop(str(e))
+            
+            except Exception:
+                
+                return record_exists_envelop()
             else:
                 return jsonify({'message' : 'done'})
+        
+        #change the name of the function 
+        _post.__name__ = 'post' + model.__tablename__
         self.app.route('/%s' % model.__tablename__, methods=['POST'])(_post)
+    
+    def delete_for(self, model):
+
+        if not model.__mapper__.primary_key:
+            raise PrimaryKeyNotFound('Primary Key Not Found in %s table' % model.__tablename__)
+        
+        #get the primary_key
+        _primary_key = model.__mapper__.primary_key[0].name
+        def _delete(id):
+            try:
+                _resource = self.db_session.query(model).filter(getattr(model, _primary_key) == id).one()
+                self.db_session.delete(_resource)
+                self.db_session.commit()
+            except Exception:
+                raise
+            else:
+                return record_deleted_envelop()
+        
+        _delete.__name__ = 'delete_' + model.__tablename__
+
+        self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
+
 
     
     

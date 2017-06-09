@@ -17,11 +17,11 @@ def json_records_envelop(data):
     }
 
 def fatal_error_envelop():
-    return {
+    return jsonify({
         'status' : 'OK',
         'code' : 404,
         'message' : 'Unknown Error'
-    }
+    })
 
 def record_updated_envelop(data):
     return jsonify({
@@ -38,9 +38,16 @@ def record_notfound_envelop():
         'message' : 'Resource not found'
     })
 
-def record_exists_envelop(message):
+def record_exists_envelop(message=None):
     return jsonify({
         'status' : 'Fail',
         'code' : 404, 
         'message' : message or 'Record already exists!!'
+    })
+
+def record_deleted_envelop(message=None):
+    return jsonify({
+        'status' : 'OK',
+        'code' : 200,
+        'message' : message or 'Resource deleted successfully'
     })
