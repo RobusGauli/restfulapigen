@@ -51,3 +51,10 @@ def record_deleted_envelop(message=None):
         'code' : 200,
         'message' : message or 'Resource deleted successfully'
     })
+
+def data_error_envelop(message=None):
+    return jsonify({
+        'status' : 'Fail',
+        'code': 404,
+        'message' : message or 'Value too long'
+    })

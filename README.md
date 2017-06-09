@@ -25,6 +25,10 @@ from my_session import db_session
 app = Flask(__name__)
 
 my_api = RESTApi(app, db_session)
+#generate all GET, PUT, POST, DELETE methods for model
+my_api.rest_for(Comment)
+
+#you can also apply specific method for resource 
 #generate 'GET' support for Person model
 my_api.get_for(Person)
 #generate 'UPDATE' support for Person model

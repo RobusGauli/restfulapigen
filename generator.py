@@ -12,6 +12,7 @@ from flask import request
 
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError
 
 from restfulapigen.envelop import (
     fatal_error_envelop,
@@ -20,7 +21,8 @@ from restfulapigen.envelop import (
     record_created_envelop,
     record_notfound_envelop,
     record_exists_envelop,
-    record_deleted_envelop
+    record_deleted_envelop,
+    data_error_envelop
 )
 
 from restfulapigen.errors import (
@@ -28,7 +30,9 @@ from restfulapigen.errors import (
 )
 
 
-format_error = lambda _em : re.search(r'\n.*\n', _em).group(0).strip()
+format_error = lambda _em : re.search(r'\n.*\n', _em).group(0).strip().capitalize()
+
+format_data_error = lambda _em : re.search(r'\).*\n', _em).group(0)[1:].strip().capitalize()
 
 def new_method(model_name):
     def decorator(func):
@@ -111,6 +115,8 @@ class RESTApi:
                 self.db_session.commit()
             except IntegrityError as e:
                 return record_exists_envelop(format_error(str(e)))
+            except DataError as e:
+                return data_error_envelop(format_data_error(str(e)))
             else:
                 return record_updated_envelop(request.json)
 
@@ -126,11 +132,12 @@ class RESTApi:
                 self.db_session.add(model(**request.json))
                 self.db_session.commit()
             
-            except Exception:
-                
-                return record_exists_envelop()
+            except IntegrityError as e:
+                return record_exists_envelop(format_error(str(e)))
+            except DataError as e:
+                return data_error_envelop(format_data_error(str(e)))
             else:
-                return jsonify({'message' : 'done'})
+                return record_created_envelop(request.json)
         
         #change the name of the function 
         _post.__name__ = 'post' + model.__tablename__
@@ -148,14 +155,23 @@ class RESTApi:
                 _resource = self.db_session.query(model).filter(getattr(model, _primary_key) == id).one()
                 self.db_session.delete(_resource)
                 self.db_session.commit()
-            except Exception:
-                raise
+            except NoResultFound:
+                return record_notfound_envelop()
             else:
                 return record_deleted_envelop()
         
         _delete.__name__ = 'delete_' + model.__tablename__
 
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
+    
+
+    def rest_for(self, model):
+        '''Apply all the http methods for the resources'''
+        self.get_for(model)
+        self.post_for(model)
+        self.delete_for(model)
+        self.update_for(model)
+
 
 
     
