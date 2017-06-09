@@ -63,8 +63,8 @@ class RESTApi:
         
         def _update_resource(id):
             try:
-                #self.db_session.query(model).filter(model.id == id).update(request.json)
-                #self.db_session.commit()
+                self.db_session.query(model).filter(model.id == id).update(request.json)
+                self.db_session.commit()
                 pass
             except Exception:
                 return fatal_error_envelop()
