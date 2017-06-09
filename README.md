@@ -39,4 +39,4 @@ my_api.get_for(Comment)
 
 
 ### Credits
-Contributors are super welcome!!
+Contributors are super welcome!!!!!
