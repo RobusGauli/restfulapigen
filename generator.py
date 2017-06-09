@@ -22,7 +22,8 @@ from restfulapigen.envelop import (
     record_notfound_envelop,
     record_exists_envelop,
     record_deleted_envelop,
-    data_error_envelop
+    data_error_envelop,
+    validation_error_envelop
 )
 
 from restfulapigen.errors import (
@@ -125,9 +126,13 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['PUT'])(_update_resource)
     
 
-    def post_for(self, model):
+    def post_for(self, model, validation=None):
 
         def _post():
+            if validation:
+                valid, err = validate(validation, request.json)
+                if not valid:
+                    return validation_error_envelop(err)
             try:
                 self.db_session.add(model(**request.json))
                 self.db_session.commit()
@@ -174,6 +179,32 @@ class RESTApi:
 
 
 
+
+def validate(validation, data):
+    #get all the keys from data that are to be validated
+    _keys = list(data.keys() & validation.keys())
+
+    for key in _keys:
+        #get the val
+        _val = data[key]
+        
+        if validation[key]['not_null'] and _val is None:
+            return False, 'Value for key %r cannot be Null/None' %(key)
+
+        if isinstance(_val, int):
+            if validation[key].get('max_val', None) and _val >= validation[key]['max_val']:
+                return False, 'Integer value for %r cannot be greater than  %s' % (key, validation[key]['max_val'])
+            
+            if validation[key].get('min_val', None) and _val <= validation[key]['min_val']:
+                return False, 'Integer value for %r cannot be less than %s' %(key, validation[key]['min_val'])
     
+        if validation[key].get('max_len', None) and not len(str(_val)) <= validation[key]['max_len']:
+            return False, 'Value for key %r cannot have length more than %s' % (key, validation[key]['max_len'])
+        
+        if validation[key].get('min_len', None) and not len(str(_val)) >= validation[key]['min_len']:
+            return False, 'Value for key %r cannot have length less than %s' % (key, validation[key]['min_len'])
+        
+        
     
+    return True, None
     

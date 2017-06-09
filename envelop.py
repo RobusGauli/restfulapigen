@@ -58,3 +58,10 @@ def data_error_envelop(message=None):
         'code': 404,
         'message' : message or 'Value too long'
     })
+
+def validation_error_envelop(message=None):
+    return jsonify({
+        'status' : 'Fail',
+        'code' : 500,
+        'message' : message or 'Validation Error'
+    })
