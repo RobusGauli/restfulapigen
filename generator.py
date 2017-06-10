@@ -4,8 +4,10 @@ __author__ ='robusgauli@gmail.com'
 import os
 import sys
 import re
+import json
 import functools
 import itertools
+
 
 from flask import jsonify
 from flask import request
@@ -31,9 +33,16 @@ from restfulapigen.errors import (
 )
 
 
-format_error = lambda _em : re.search(r'\n.*\n', _em).group(0).strip().capitalize()
+format_error = lambda _em : \
+                    re.search(r'\n.*\n', _em).group(0).strip().capitalize()
 
-format_data_error = lambda _em : re.search(r'\).*\n', _em).group(0)[1:].strip().capitalize()
+format_data_error = lambda _em : \
+                    re.search(r'\).*\n', _em).group(0)[1:].strip().capitalize()
+
+valid_file = lambda v_file : os.path.exists(v_file) \
+                    and os.path.isfile(v_file) and os.path.splitext(v_file)[1] == '.json'
+
+
 
 def new_method(model_name):
     def decorator(func):
@@ -47,14 +56,20 @@ def new_method(model_name):
 
 
 
+
 class RESTApi:
 
-    def __init__(self, app, db_session):
+    def __init__(self, app, db_session, validation_file = None):
         self.app = app
         self.db_session = db_session
-
-        #now we are going to keep track of all the models
         
+        if validation_file is not None and valid_file(validation_file):
+            #this is valid json file
+            self._validation = json.loads(open(validation_file).read())
+        else:
+            self._validation = None
+        
+            
     def get_for(self, model, 
                     before_response_for_resources=None, 
                     before_response_for_resource=None):
@@ -126,11 +141,11 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['PUT'])(_update_resource)
     
 
-    def post_for(self, model, validation=None):
+    def post_for(self, model):
 
         def _post():
-            if validation:
-                valid, err = validate(validation, request.json)
+            if self._validation and model.__name__ in self._validation:
+                valid, err = validate(self._validation[model.__name__], request.json)
                 if not valid:
                     return validation_error_envelop(err)
             try:
@@ -188,7 +203,7 @@ def validate(validation, data):
         #get the val
         _val = data[key]
         
-        if validation[key]['not_null'] and _val is None:
+        if validation[key].get('not_null', None) and _val is None:
             return False, 'Value for key %r cannot be Null/None' %(key)
 
         if isinstance(_val, int):
