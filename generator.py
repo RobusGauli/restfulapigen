@@ -12,6 +12,7 @@ import itertools
 from flask import jsonify
 from flask import request
 
+from sqlalchemy.orm.relationships import RelationshipProperty
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import DataError
@@ -72,13 +73,15 @@ class RESTApi:
             
     def get_for(self, model, 
                     before_response_for_resources=None, 
-                    before_response_for_resource=None, *, extract=None):
+                    before_response_for_resource=None, *, 
+                    extract=None,
+                    relationship=False):
 
         if not model.__mapper__.primary_key:
             raise PrimaryKeyNotFound('Primary key not found in % table' % model.__tablename__)
     
         _primary_key = model.__mapper__.primary_key[0].name
-        print(extract)
+        
         if extract:
             extract = list(extract)
         
@@ -93,7 +96,7 @@ class RESTApi:
             if before_response_for_resources:
                 before_response_for_resources(_list_data)
             
-            return jsonify(json_records_envelop(_list_data))
+            return json_records_envelop(_list_data)
         _get_resources.__name__ = 'get_all' + model.__tablename__ 
 
         self.app.route('/%s' % model.__tablename__)(_get_resources)
@@ -124,11 +127,49 @@ class RESTApi:
 
                 if before_response_for_resource:
                     before_response_for_resource(_data)
-                print(_data)
-                return jsonify(json_records_envelop(_data))
+                
+                return json_records_envelop(_data)
         _get_resource.__name__ = 'get' + model.__tablename__
 
         self.app.route('/%s/<int:r_id>' % model.__tablename__)(_get_resource)
+
+        if relationship:
+            #loads the relationship information
+            self.db_session.query(model)
+            ##get the relatioship atributes with the direction having 'ONE TO MANY'
+
+            _props = list(attr for attr, rel_prop in 
+                                    model.__mapper__._props.items() if isinstance(rel_prop, RelationshipProperty) 
+                                    and rel_prop.direction.name == 'ONETOMANY')
+            
+                
+            
+            for _prop in _props:
+                #create a nested uri for the each _prop 
+                
+                def _get_resources_by_parent(id):
+                    try:
+                        parent = self.db_session.query(model).\
+                                    filter(getattr(model, _primary_key) == id).one()
+                    except NoResultFound:
+                        return record_notfound_envelop()
+                    else:
+                        _results = getattr(parent, _prop)
+                        _list = list({key : val for key, val in vars(data).items() if not key.startswith('_')}
+                                        for data in _results)
+                        return json_records_envelop(_list)
+
+
+
+                _get_resources_by_parent.__name__ = 'get' + model.__tablename__ + 'by' + _prop
+                self.app.route('/%s/<int:id>/%s' % (model.__tablename__, _prop))(_get_resources_by_parent)
+                    
+
+
+
+            
+            
+            
     
 
     def update_for(self, model, 

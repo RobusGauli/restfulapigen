@@ -9,12 +9,12 @@ def record_created_envelop(data):
     })
 
 def json_records_envelop(data):
-    return {
+    return jsonify({
         'status' : 'OK',
         'code' : 200,
         'data' : data,
         'message' : 'Success'
-    }
+    })
 
 def fatal_error_envelop():
     return jsonify({
