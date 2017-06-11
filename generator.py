@@ -1,6 +1,5 @@
 __author__ ='robusgauli@gmail.com'
 
-
 import os
 import sys
 import collections
@@ -8,8 +7,6 @@ import re
 import json
 import functools
 import itertools
-
-
 
 from flask import jsonify
 from flask import request
@@ -77,7 +74,8 @@ class RESTApi:
                     before_response_for_resources=None, 
                     before_response_for_resource=None, *, 
                     extract=None,
-                    relationship=False):
+                    relationship=False,
+                    extractfor_resources=None):
 
         if not model.__mapper__.primary_key:
             raise PrimaryKeyNotFound('Primary key not found in % table' % model.__tablename__)
@@ -89,17 +87,44 @@ class RESTApi:
         
         def _get_resources():
             results = self.db_session.query(model).all()
-            _list_data_exp = ({key: val for key, val in vars(r).items()
-                                if not key.startswith('_')
-                                } for r in results)
-            #inject the URI to the data
-            _list_data = list({**adict, 'uri' : '/%s/%s' % (model.__tablename__, adict['id'])}
-                                for adict in _list_data_exp)
-            #if after request if not not then call the predicate
-            if before_response_for_resources:
-                before_response_for_resources(_list_data)
             
-            return json_records_envelop(_list_data)
+            if not extractfor_resources:
+                print('appyfor resource false')
+                _list_data_exp = ({key: val for key, val in vars(r).items()
+                                    if not key.startswith('_')
+                                    } for r in results)
+                #inject the URI to the data
+                _list_data = list({**adict, 'uri' : '/%s/%s' % (model.__tablename__, adict[_primary_key])}
+                                for adict in _list_data_exp)
+                #if after request if not not then call the predicate
+                if before_response_for_resources:
+                    before_response_for_resources(_list_data)
+            
+                return json_records_envelop(_list_data)
+            else:
+                _extractfor_resources = list(extractfor_resources)
+                
+                _list_data = []
+                for result in results:
+                    _adict = {key:val for key, val in vars(result).items() if not key.startswith('_')}
+                    adict = {**_adict, 'uri' : '/%s/%s' % (model.__tablename__, _adict[_primary_key])}
+                    #nod for each extract with the many to one relationship,
+                    for relationship in _extractfor_resources:
+                        _rel_val = getattr(result, relationship)
+                        if not isinstance(_rel_val, collections.Iterable):
+                            adict[relationship] = {key: val for key, val in vars(_rel_val).items()
+                                                                    if not key.startswith('_')}
+                            continue
+                        
+                        adict[relationship] = list({key: val for key, val in vars(_r_val).items()
+                                                                    if not key.startswith('_')}
+                                                                    for _r_val in _rel_val)
+                                                                    
+
+                    #finally add to the list
+                    _list_data.append(adict)
+                return json_records_envelop(_list_data)
+
         _get_resources.__name__ = 'get_all' + model.__tablename__ 
 
         self.app.route('/%s' % model.__tablename__)(_get_resources)
@@ -242,10 +267,11 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
     
 
-    def rest_for(self, model, *, extract=None, relationship=False):
+    def rest_for(self, model, *, extract=None, relationship=False, extractfor_resources=False):
         '''Apply all the http methods for the resources'''
 
-        self.get_for(model, extract=extract, relationship=relationship)
+        self.get_for(model, extract=extract, relationship=relationship,
+                    extractfor_resources=extractfor_resources)
         self.post_for(model)
         self.delete_for(model)
         self.update_for(model)
