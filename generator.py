@@ -72,13 +72,15 @@ class RESTApi:
             
     def get_for(self, model, 
                     before_response_for_resources=None, 
-                    before_response_for_resource=None):
+                    before_response_for_resource=None, *, extract=None):
 
         if not model.__mapper__.primary_key:
             raise PrimaryKeyNotFound('Primary key not found in % table' % model.__tablename__)
     
         _primary_key = model.__mapper__.primary_key[0].name
-        
+        print(extract)
+        if extract:
+            extract = list(extract)
         
         def _get_resources():
             results = self.db_session.query(model).all()
@@ -102,17 +104,28 @@ class RESTApi:
 
                 result = self.db_session.query(model).\
                             filter(getattr(model, _primary_key) == r_id).one()
+                _data = {
+                    key : val for key, val in vars(result).items()
+                    if not key.startswith('_')
+                }
+                
+                if extract:
+                    for relationship in extract:
+                        #get the attribute
+                        children = getattr(result, relationship)
+                        _data[relationship] = list({key : val for key, val 
+                                                    in vars(child).items() if not
+                                                    key.startswith('_')} for child in children)
+                        
+                
             except NoResultFound:
                 return record_notfound_envelop()
+            else:
 
-            _data = {
-                key : val for key, val in vars(result).items()
-                if not key.startswith('_')
-            }
-
-            if before_response_for_resource:
-                before_response_for_resource(_data)
-            return jsonify(json_records_envelop(_data))
+                if before_response_for_resource:
+                    before_response_for_resource(_data)
+                print(_data)
+                return jsonify(json_records_envelop(_data))
         _get_resource.__name__ = 'get' + model.__tablename__
 
         self.app.route('/%s/<int:r_id>' % model.__tablename__)(_get_resource)
@@ -185,9 +198,10 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
     
 
-    def rest_for(self, model):
+    def rest_for(self, model, extract=None):
         '''Apply all the http methods for the resources'''
-        self.get_for(model)
+
+        self.get_for(model, extract)
         self.post_for(model)
         self.delete_for(model)
         self.update_for(model)
