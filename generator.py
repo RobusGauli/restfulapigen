@@ -3,10 +3,12 @@ __author__ ='robusgauli@gmail.com'
 
 import os
 import sys
+import collections
 import re
 import json
 import functools
 import itertools
+
 
 
 from flask import jsonify
@@ -87,11 +89,12 @@ class RESTApi:
         
         def _get_resources():
             results = self.db_session.query(model).all()
-            _list_data = list({
-                key : val for key, val in vars(r).items()
-                if not key.startswith('_')
-            } for r in results)
-
+            _list_data_exp = ({key: val for key, val in vars(r).items()
+                                if not key.startswith('_')
+                                } for r in results)
+            #inject the URI to the data
+            _list_data = list({**adict, 'uri' : '/%s/%s' % (model.__tablename__, adict['id'])}
+                                for adict in _list_data_exp)
             #if after request if not not then call the predicate
             if before_response_for_resources:
                 before_response_for_resources(_list_data)
@@ -116,6 +119,13 @@ class RESTApi:
                     for relationship in extract:
                         #get the attribute
                         children = getattr(result, relationship)
+                        if not isinstance(children, collections.Iterable):
+                            #that means it is on many to one side
+                            _data[relationship] = {key: val for key, val in
+                                                    vars(children).items() if not
+                                                    key.startswith('_')}
+                            continue
+                        
                         _data[relationship] = list({key : val for key, val 
                                                     in vars(child).items() if not
                                                     key.startswith('_')} for child in children)
@@ -164,14 +174,7 @@ class RESTApi:
                 _get_resources_by_parent.__name__ = 'get' + model.__tablename__ + 'by' + _prop
                 self.app.route('/%s/<int:id>/%s' % (model.__tablename__, _prop))(_get_resources_by_parent)
                     
-
-
-
-            
-            
-            
     
-
     def update_for(self, model, 
                     before_response_for_resource=None):
         if not model.__mapper__.primary_key:
@@ -239,10 +242,10 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
     
 
-    def rest_for(self, model, extract=None):
+    def rest_for(self, model, *, extract=None, relationship=False):
         '''Apply all the http methods for the resources'''
 
-        self.get_for(model, extract)
+        self.get_for(model, extract=extract, relationship=relationship)
         self.post_for(model)
         self.delete_for(model)
         self.update_for(model)
