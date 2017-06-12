@@ -139,6 +139,9 @@ class RESTApi:
                     key : val for key, val in vars(result).items()
                     if not key.startswith('_')
                 }
+
+                if before_response_for_resource:
+                    before_response_for_resource(result, _data)
                 
                 if extract:
                     for relationship in extract:
@@ -159,9 +162,6 @@ class RESTApi:
             except NoResultFound:
                 return record_notfound_envelop()
             else:
-
-                if before_response_for_resource:
-                    before_response_for_resource(_data)
                 
                 return json_records_envelop(_data)
         _get_resource.__name__ = 'get' + model.__tablename__
@@ -235,6 +235,7 @@ class RESTApi:
                 self.db_session.commit()
             
             except IntegrityError as e:
+                self.db_session.rollback()
                 return record_exists_envelop(format_error(str(e)))
             except DataError as e:
                 return data_error_envelop(format_data_error(str(e)))
@@ -267,11 +268,18 @@ class RESTApi:
         self.app.route('/%s/<int:id>' % model.__tablename__, methods=['DELETE'])(_delete)
     
 
-    def rest_for(self, model, *, extract=None, relationship=False, extractfor_resources=False):
+    def rest_for(self, model, *, extract=None,
+                                 relationship=False, 
+                                 extractfor_resources=False, 
+                                 before_response_for_resources=None,
+                                 before_response_for_resource=None):
         '''Apply all the http methods for the resources'''
 
-        self.get_for(model, extract=extract, relationship=relationship,
-                    extractfor_resources=extractfor_resources)
+        self.get_for(model, extract=extract, 
+                            relationship=relationship,
+                            extractfor_resources=extractfor_resources,
+                            before_response_for_resources=before_response_for_resources,
+                            before_response_for_resource=before_response_for_resource)
         self.post_for(model)
         self.delete_for(model)
         self.update_for(model)
