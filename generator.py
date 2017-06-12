@@ -111,6 +111,9 @@ class RESTApi:
                     #nod for each extract with the many to one relationship,
                     for relationship in _extractfor_resources:
                         _rel_val = getattr(result, relationship)
+                        if not _rel_val:
+                            adict[relationship] = None
+                            continue
                         if not isinstance(_rel_val, collections.Iterable):
                             adict[relationship] = {key: val for key, val in vars(_rel_val).items()
                                                                     if not key.startswith('_')}
@@ -147,6 +150,9 @@ class RESTApi:
                     for relationship in extract:
                         #get the attribute
                         children = getattr(result, relationship)
+                        if not children:
+                            _data[relationship] = None
+                            continue
                         if not isinstance(children, collections.Iterable):
                             #that means it is on many to one side
                             _data[relationship] = {key: val for key, val in
@@ -238,6 +244,7 @@ class RESTApi:
                 self.db_session.rollback()
                 return record_exists_envelop(format_error(str(e)))
             except DataError as e:
+                self.db_session.rollback()
                 return data_error_envelop(format_data_error(str(e)))
             else:
                 return record_created_envelop(request.json)
@@ -259,6 +266,7 @@ class RESTApi:
                 self.db_session.delete(_resource)
                 self.db_session.commit()
             except NoResultFound:
+                
                 return record_notfound_envelop()
             else:
                 return record_deleted_envelop()
